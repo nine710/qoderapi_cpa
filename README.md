@@ -123,6 +123,10 @@ http://你的IP:8963/v1/chat/completions
 
 最后一步，把 CPA 暴露出来的端口、IP、URL 配置到 CCSwitch，也就是我们自己的智能体接入侧。
 
+CCSwitch 的配置样例截图如下：
+
+![CCSwitch 配置样例](imgae/5.png)
+
 你最终需要在 CCSwitch 中填写的是：
 
 - CPA 的访问 IP
