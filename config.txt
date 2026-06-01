@@ -1,0 +1,22 @@
+  - name: "qoder2api"
+    disabled: false
+    prefix: "qoder"
+    disable-cooling: true
+    base-url: "http:xxxx:8963/v1"
+
+    api-key-entries:
+      - api-key: "dummy"
+        proxy-url: "direct"
+
+    models:
+      - name: "Qwen3.7-Max"
+        alias: "qwen3.5-plus"
+
+      - name: "lite"
+        alias: "lite"
+
+      - name: "performance"
+        alias: "performance"
+
+      - name: "auto"
+        alias: "auto"

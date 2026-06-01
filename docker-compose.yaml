@@ -1,0 +1,11 @@
+services:
+  gateway:
+    build:
+      context: .
+    ports:
+      - "8888:8888"
+    environment:
+      QODER_PAT: ${QODER_PAT}
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8888
+      QODER_UPSTREAM_TIMEOUT_SECONDS: 60
