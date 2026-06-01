@@ -1,11 +1,17 @@
 # Qoder 逆向反代到智能体教程
 
-本项目通过自研逆向网关，完成对 Qoder 的协议接入、鉴权逆向与接口暴露，再经由 CPA 反向代理接入到 CCSwitch 智能体系统。
+本项目通过自研逆向工程，完成对 Qoder 的协议接入、鉴权逆向与接口暴露，再经由 CPA 反向代理接入到 CCSwitch 智能体系统。
 
 整体链路：
 
 ```text
 CCSwitch -> CPA -> qoder-gateway -> Qoder
+```
+
+开始之前，先获取 CPA：
+
+```bash
+git clone https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
 ```
 
 ## 第一步：获取 Qoder Key
@@ -14,7 +20,7 @@ CCSwitch -> CPA -> qoder-gateway -> Qoder
 
 - https://qoder.com/account/integrations
 
-拿到 Key 后，后面会配置到 gateway 中：
+拿到 Key 后，配置到本项目中：
 
 ```env
 QODER_PAT=xxxxx
@@ -22,7 +28,7 @@ QODER_PAT=xxxxx
 
 ## 第二步：构建并启动 qoder-gateway
 
-`gateway` 是本仓库自研的逆向项目，将 Qoder 私有协议转换为 OpenAI 兼容接口。源码已在仓库根目录，无需额外 clone。
+本仓库根目录即为自研逆向项目 `qoder-gateway`（Spring Boot 3.3 / Java 17），将 Qoder 私有协议转换为 OpenAI 兼容接口。
 
 **2.1 配置环境变量**
 
@@ -32,27 +38,13 @@ QODER_PAT=xxxxx
 QODER_PAT=xxxxx
 ```
 
-**2.2 构建**
-
-```bash
-mvn -DskipTests package
-```
-
-**2.3 启动**
-
-推荐使用 Docker：
+**2.2 启动**
 
 ```bash
 docker compose up --build -d
 ```
 
-也可以直接运行 jar：
-
-```bash
-QODER_PAT=xxxxx java -jar target/qoder-gateway-0.1.0.jar
-```
-
-**2.4 验证**
+**2.3 验证**
 
 ```bash
 curl http://你的IP:8888/health
@@ -65,7 +57,7 @@ curl http://你的IP:8888/v1/chat/completions \
   -d '{"model":"lite","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-gateway 默认监听 `0.0.0.0:8888`，完整环境变量：
+默认监听 `0.0.0.0:8888`，可通过环境变量修改：
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
@@ -75,17 +67,11 @@ gateway 默认监听 `0.0.0.0:8888`，完整环境变量：
 
 ## 第三步：配置并启动 CPA
 
-CPA（Cli-Proxy-API-Management-Center）负责代理、管理 gateway 暴露的接口。
+CPA（Cli-Proxy-API-Management-Center）负责代理、管理 qoder-gateway 暴露的接口。
 
-**3.1 获取 CPA**
+**3.1 配置 CPA**
 
-```bash
-git clone https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
-```
-
-**3.2 配置 CPA**
-
-在 CPA 的 `config.yaml` 中填入 gateway 的地址和模型信息：
+在 CPA 的 `config.yaml` 中填入 qoder-gateway 的地址和模型信息：
 
 ```yaml
   - name: "qoder-gateway"
@@ -99,6 +85,9 @@ git clone https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
         proxy-url: "direct"
 
     models:
+      - name: "Qwen3.7-Max"
+        alias: "qwen3.5-plus"       # 根据智能体调整：Claude Code 用 qwen3.5-plus，Codex 用 gpt-5.4
+
       - name: "lite"
         alias: "lite"
 
@@ -111,11 +100,13 @@ git clone https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
 
 关键配置项：
 
-- `base-url`：改成你的 gateway 地址和端口
+- `base-url`：改成你的 qoder-gateway 地址和端口
 - `prefix`：路由前缀，按你的命名习惯调整
 - `models`：按实际需要暴露的模型配置
 
-**3.3 启动 CPA**
+> **关于模型映射：** Qwen3.7-Max 在 CPA 上的 alias 必须映射为各智能体兼容的模型名，否则无法调用。例如 Claude Code 上应映射为 `qwen3.5-plus`，Codex 上应映射为 `gpt-5.4`，具体根据你的智能体所支持的模型名称来设置。
+
+**3.2 启动 CPA**
 
 具体启动方式以 CPA 项目自身文档为准。
 
@@ -132,7 +123,7 @@ git clone https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
 
 ## 验证顺序
 
-1. `curl http://IP:8888/health` — gateway 是否正常
+1. `curl http://IP:8888/health` — qoder-gateway 是否正常
 2. `curl http://IP:8888/v1/chat/completions ...` — 接口是否可访问
 3. CPA 是否正常启动并能转发请求
 4. CCSwitch 是否已正确配置 CPA 的地址
@@ -151,11 +142,6 @@ git clone https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
 ├── Dockerfile
 └── docker-compose.yaml
 ```
-
-同时保留了以下参考源：
-
-- `qoder2api/`：行为与协议参考实现，用于对照鉴权流程和接口行为
-- `qodercli-reverse/`：Qoder CLI 逆向文档和架构分析
 
 ## 免责声明
 
