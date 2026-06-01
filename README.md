@@ -28,7 +28,9 @@ workspace/
 
 ## 获取 Qoder Key
 
-第二步，前往 Qoder 官网获取你自己的访问 Key。
+第二步，前往 Qoder 官网的集成页面获取你自己的访问 Key：
+
+- https://qoder.com/account/integrations
 
 后续会把这个 Key 配置到 `qoder2api` 中，变量名为：
 
@@ -71,6 +73,39 @@ http://你的IP:8963/v1/chat/completions
 ## 配置并启动 CPA
 
 第五步，进入 `Cli-Proxy-API-Management-Center` 项目，打开它的 `config.yaml`，把上一步得到的 Qoder OpenAI 兼容接口配置进去，完成映射。
+
+本仓库根目录下的 `config.txt` 提供了一个可参考的 `config.yaml` 片段示例，内容如下：
+
+```yaml
+  - name: "qoder2api"
+    disabled: false
+    prefix: "qoder"
+    disable-cooling: true
+    base-url: "http:xxxx:8963/v1"
+
+    api-key-entries:
+      - api-key: "dummy"
+        proxy-url: "direct"
+
+    models:
+      - name: "Qwen3.7-Max"
+        alias: "qwen3.5-plus"
+
+      - name: "lite"
+        alias: "lite"
+
+      - name: "performance"
+        alias: "performance"
+
+      - name: "auto"
+        alias: "auto"
+```
+
+你至少需要按自己的实际环境修改：
+
+- `base-url`：改成你自己的 qoder2api 地址
+- `prefix`：按你的路由命名习惯调整
+- `models`：按你实际需要暴露给 CPA 的模型名和别名调整
 
 配置时，你需要重点处理：
 
