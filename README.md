@@ -1,154 +1,164 @@
-# Qoder Gateway
+# Qoder 逆向反代到智能体教程
 
-OpenAI 兼容的 Qoder API 网关，将 Qoder 私有 API 转换为标准 `/v1/chat/completions` 接口。
+本项目通过自研逆向网关，完成对 Qoder 的协议接入、鉴权逆向与接口暴露，再经由 CPA 反向代理接入到 CCSwitch 智能体系统。
 
-## 快速开始
+整体链路：
 
-### 环境要求
+```text
+CCSwitch -> CPA -> qoder-gateway -> Qoder
+```
 
-- JDK 17+
-- Maven 3.9+
-- Docker（可选）
+## 第一步：获取 Qoder Key
 
-### 构建
+前往 Qoder 官网的集成页面获取你的个人访问令牌：
+
+- https://qoder.com/account/integrations
+
+拿到 Key 后，后面会配置到 gateway 中：
+
+```env
+QODER_PAT=xxxxx
+```
+
+## 第二步：构建并启动 qoder-gateway
+
+`gateway` 是本仓库自研的逆向项目，将 Qoder 私有协议转换为 OpenAI 兼容接口。源码已在仓库根目录，无需额外 clone。
+
+**2.1 配置环境变量**
+
+在项目根目录创建 `.env` 文件，写入你的 Qoder Key：
+
+```env
+QODER_PAT=xxxxx
+```
+
+**2.2 构建**
 
 ```bash
 mvn -DskipTests package
 ```
 
-### 运行
+**2.3 启动**
+
+推荐使用 Docker：
 
 ```bash
-QODER_PAT=<你的个人令牌> java -jar target/qoder-gateway-0.1.0.jar
+docker compose up --build -d
 ```
 
-默认监听 `0.0.0.0:8888`，可通过环境变量修改：
-
-| 环境变量 | 默认值 | 说明 |
-|---------|--------|------|
-| `QODER_PAT` | (必填) | Qoder 个人访问令牌 |
-| `APP_HOST` | `0.0.0.0` | 监听地址 |
-| `APP_PORT` | `8888` | 监听端口 |
-| `QODER_UPSTREAM_TIMEOUT_SECONDS` | `60` | 上游超时秒数 |
-
-### Docker
+也可以直接运行 jar：
 
 ```bash
-QODER_PAT=<你的个人令牌> docker compose up --build -d
+QODER_PAT=xxxxx java -jar target/qoder-gateway-0.1.0.jar
 ```
 
-## API
-
-### 聊天补全
-
-```
-POST /v1/chat/completions
-```
-
-支持流式 (`stream: true`) 和非流式两种模式，兼容 OpenAI Chat Completions 请求格式。
-
-**非流式请求：**
+**2.4 验证**
 
 ```bash
-curl http://localhost:8888/v1/chat/completions \
+curl http://你的IP:8888/health
+# 返回 {"status":"ok"}
+```
+
+```bash
+curl http://你的IP:8888/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{"model":"lite","messages":[{"role":"user","content":"hello"}]}'
 ```
 
-**流式请求：**
+gateway 默认监听 `0.0.0.0:8888`，完整环境变量：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `QODER_PAT` | (必填) | Qoder 个人访问令牌 |
+| `APP_HOST` | `0.0.0.0` | 监听地址 |
+| `APP_PORT` | `8888` | 监听端口 |
+
+## 第三步：配置并启动 CPA
+
+CPA（Cli-Proxy-API-Management-Center）负责代理、管理 gateway 暴露的接口。
+
+**3.1 获取 CPA**
 
 ```bash
-curl http://localhost:8888/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model":"lite","messages":[{"role":"user","content":"hello"}],"stream":true}'
+git clone https://github.com/router-for-me/Cli-Proxy-API-Management-Center.git
 ```
 
-**Tool Call：**
+**3.2 配置 CPA**
 
-```bash
-curl http://localhost:8888/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model":"lite",
-    "messages":[{"role":"user","content":"2+3等于多少?"}],
-    "tools":[{"type":"function","function":{"name":"calculator","parameters":{"type":"object","properties":{"expr":{"type":"string"}}}}}]
-  }'
+在 CPA 的 `config.yaml` 中填入 gateway 的地址和模型信息：
+
+```yaml
+  - name: "qoder-gateway"
+    disabled: false
+    prefix: "qoder"
+    disable-cooling: true
+    base-url: "http://你的IP:8888/v1"
+
+    api-key-entries:
+      - api-key: "dummy"
+        proxy-url: "direct"
+
+    models:
+      - name: "lite"
+        alias: "lite"
+
+      - name: "performance"
+        alias: "performance"
+
+      - name: "auto"
+        alias: "auto"
 ```
 
-### 健康检查
+关键配置项：
+
+- `base-url`：改成你的 gateway 地址和端口
+- `prefix`：路由前缀，按你的命名习惯调整
+- `models`：按实际需要暴露的模型配置
+
+**3.3 启动 CPA**
+
+具体启动方式以 CPA 项目自身文档为准。
+
+## 第四步：接入 CCSwitch
+
+把 CPA 暴露出来的地址和端口配置到 CCSwitch，也就是我们自己的智能体接入侧。
+
+你需要在 CCSwitch 中填写：
+
+- CPA 的访问 IP
+- CPA 的监听端口
+- 对应的接口 URL
+- 需要对接的模型或路由配置
+
+## 验证顺序
+
+1. `curl http://IP:8888/health` — gateway 是否正常
+2. `curl http://IP:8888/v1/chat/completions ...` — 接口是否可访问
+3. CPA 是否正常启动并能转发请求
+4. CCSwitch 是否已正确配置 CPA 的地址
+
+## 项目说明
+
+本仓库根目录是自研逆向网关 `qoder-gateway`（Spring Boot 3.3 / Java 17 / Maven），结构如下：
 
 ```
-GET /health
+├── api/                        # HTTP 接口层（/v1/chat/completions、/health）
+├── application/                # 核心编排层（流式/非流式、会话管理）
+├── infra/                      # 基础设施层（鉴权、签名、SSE 客户端）
+├── protocol/                   # 协议转换层（编码、消息转换、SSE 翻译）
+├── support/                    # 配置与模型
+├── pom.xml
+├── Dockerfile
+└── docker-compose.yaml
 ```
 
-## 可用模型
+同时保留了以下参考源：
 
-| 模型名 | 说明 |
-|--------|------|
-| `lite` | 轻量模型 |
-| `performance` | 高性能模型 |
-| `auto` | 自动选择 |
+- `qoder2api/`：行为与协议参考实现，用于对照鉴权流程和接口行为
+- `qodercli-reverse/`：Qoder CLI 逆向文档和架构分析
 
-## 项目结构
+## 免责声明
 
-```
-├── api/                        # HTTP 接口层
-│   ├── ChatController.java     # /v1/chat/completions
-│   ├── ChatResponseWriter.java # SSE/JSON 响应写入
-│   ├── HealthController.java   # /health
-│   └── ApiExceptionHandler.java
-├── application/                # 应用编排层
-│   ├── ChatGatewayService.java # 核心编排（流式/非流式）
-│   └── SessionFacade.java      # 会话管理
-├── infra/                      # 基础设施层
-│   ├── http/
-│   │   └── HttpClientFactory.java
-│   └── qoder/
-│       ├── BootstrapHttpClient.java  # 引导鉴权（jobToken + heartbeat）
-│       ├── SessionTokenFactory.java  # Bearer 会话构造（RSA/AES 加密）
-│       ├── SignatureSupport.java     # 请求签名
-│       ├── SignedGatewayClient.java  # 上游 SSE 客户端
-│       └── SseLineReader.java
-├── protocol/                   # 协议转换层
-│   ├── openai/
-│   │   └── ChatRequestNormalizer.java
-│   └── qoder/
-│       ├── PayloadCodec.java         # 自定义编码
-│       ├── StreamEventTranslator.java # 上游事件 → OpenAI delta
-│       └── UpstreamPayloadAssembler.java # 消息格式转换
-└── support/                    # 支撑模块
-    ├── config/
-    │   └── AppProperties.java
-    └── model/
-        ├── OpenAiChatRequest.java
-        ├── NormalizedChatRequest.java
-        ├── QoderSession.java
-        ├── SessionBootstrap.java
-        └── StreamDelta.java
-```
-
-## 架构概览
-
-```
-客户端 (OpenAI SDK / curl)
-        │
-        ▼
-  /v1/chat/completions          ← OpenAI 兼容接口
-        │
-        ▼
-  ChatGatewayService            ← 流式/非流式编排
-   ├── UpstreamPayloadAssembler ← OpenAI → Qoder 消息转换
-   ├── StreamEventTranslator    ← Qoder → OpenAI delta 转换
-   └── ChatResponseWriter       ← SSE/JSON 响应输出
-        │
-        ▼
-  SignedGatewayClient           ← Bearer 签名 + SSE 连接
-        │
-        ▼
-  Qoder 上游 API                ← api3.qoder.sh
-```
-
-鉴权采用两阶段模型：
-
-1. **引导阶段** — 用 `QODER_PAT` 换取 jobToken，建立机器身份
-2. **会话阶段** — 基于 RSA/AES 加密构造 Bearer 令牌，对所有上游请求签名
+- 请自行确认你对目标平台和账号的使用权限
+- 请遵守相关平台的服务条款和适用法律
+- `Cli-Proxy-API-Management-Center` 版权归原作者所有（MIT License）
